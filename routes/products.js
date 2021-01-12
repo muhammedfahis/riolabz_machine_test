@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-const {addProducuts} = require('../controllers/products')
+const {addProducts} = require('../controllers/products')
 
-router.post('/upload',addProducuts);
+router.post('/upload',addProducts);
 router.get('/',(req,res)=>{
     res.sendFile(__dirname+'/index.html');
 })

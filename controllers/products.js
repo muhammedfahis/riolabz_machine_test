@@ -1,83 +1,112 @@
-const express = require("express");
-const xlstojson = require("xls-to-json-lc");
-const xlsxtojson =require('xlsx-to-json-lc');
-const xlsx = require('xlsx');
-const fs = require("fs");
-const db = require("../config/connection");
-const COLLECTION = require("../config/collections");
-const objectId = require('mongodb').ObjectID;
-const multer = require('multer');
+const multer = require("multer");
+const { v4: uuidv4 } = require('uuid');
+const { importExcel } = require("../libs/COMMONDB/importExcel");
+const {
+  getAllCategoriesDB,
+  updateProductDB,
+  getAllProductsDB,
+  getAllBrandsDB,
+  addSingleBrandDB,
+  addMultipleBrandsDB,
+  addSingleProductDB,
+  AddSingleCategoryDB,
+  addMultipleProductsDB,
+  getManyCategoriesDB,
+  getManyBrandsDB,
+  addMultipleCategoryDB,
+} = require("../libs/COMMONDB/db");
 
-
-
-
-var Storage = multer.diskStorage({
-  destination: function (req, file, callback) {
-    callback(null, "./public/excels");
+var storage = multer.diskStorage({
+  //multers disk storage settings
+  destination: function (req, file, cb) {
+    cb(null, "./public/excels");
   },
-  filename: function (req, file, callback) {
-    callback(
+  filename: function (req, file, cb) {
+    var datetimestamp = Date.now();
+    cb(
       null,
-      file.fieldname + "_" + Date.now() + "_" + path.extname(file.originalname)
+      file.fieldname +
+        "-" +
+        datetimestamp +
+        "." +
+        file.originalname.split(".")[file.originalname.split(".").length - 1]
     );
   },
 });
 
-// paypal config
-
 var upload = multer({
-  storage: Storage,
+  //multer settings
+  storage: storage,
+  fileFilter: function (req, file, callback) {
+    //file filter
+    if (
+      ["xls", "xlsx"].indexOf(
+        file.originalname.split(".")[file.originalname.split(".").length - 1]
+      ) === -1
+    ) {
+      return callback(new Error("Wrong extension type"));
+    }
+    callback(null, true);
+  },
 }).single("file");
 
 
-let products = [];
-let category= [];
-let brand = [];
+
+
+
+let products;
 
 
 
 
-const addProducuts = async(req,res) =>{
-  var exceltojson;
-  console.log(req.files);
-  upload(req,res,function(err){
-      if(err){
-           res.json({error_code:1,err_desc:err});
-           return;
+const addProducts = async (req, res) => {
+  try {
+    upload(req, res, async function (err) {
+      if (err) {
+        return { error_code: 1, err_desc: err };
       }
-      /** Multer gives us file info in req.file object */
-      if(!req.files){
-          res.json({error_code:1,err_desc:"No file passed"});
-          return;
+      if (!req.file) {
+        return { error_code: 1, err_desc: "No file passed" };
       }
-      /** Check the extension of the incoming file and
-       *  use the appropriate module
-       */
-      // if(req.file.originalname.split('.')[req.file.originalname.split('.').length-1] === 'xlsx'){
-      // } else {
-      //   exceltojson = xlstojson;
-      // }
-      exceltojson = xlsxtojson;
-      try {
-          exceltojson({
-              input: req.file.filename,
-              output: null, //since we don't need output.json
-              lowerCaseHeaders:true
-          }, function(err,result){
-              if(err) {
-                  return res.json({error_code:1,err_desc:err, data: null});
-              }
-              res.json({error_code:0,err_desc:null, data: result});
-          });
-      } catch (e){
-          res.json({error_code:1,err_desc:"Corupted excel file"});
-      }
-  })
-}
 
+      products = await importExcel(req.file);
+      
+    });
+    const brandId = uuidv4();
+    const categoryId = uuidv4();
     
+     products.map(async (product) => {
+      const oldCategory = await getManyCategoriesDB(product["category"]);
+      const oldBrand = await getManyBrandsDB(product["brand"]);
+      if (oldCategory) {
+        product['category'] = oldCategory['_id']     
+      } else {
+       const newCategory=  await AddSingleCategoryDB(product["category"]);
+       product['category'] = newCategory.data.ops[0]['_id']
+      }
+      if (oldBrand) {
+        product['brand'] =oldBrand['_id']   
+      } else {
+       const newBrand = await addSingleBrandDB(product["brand"]);
+        product['brand'] =newBrand.ops[0]['_id']
+      }
 
+      const oldProduct = await getAllProductsDB(product['item']);
+      console.log(oldProduct,'..................oldproduct.............');
+     if(!oldProduct){
+        addSingleProductDB(product);
+     } else {
+        updateProductDB(product['item'],product["pur_price"], product["mrp_price"]);
+     }
+    });
+    res.json(products);
+  } catch (error) {
+    return {
+      message: "ERROR IN UPLOADING FILE",
+    };
+  }
+};
 
 module.exports = {
-  addProducuts,
+  addProducts,
 };

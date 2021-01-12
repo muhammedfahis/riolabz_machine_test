@@ -19,6 +19,7 @@
     "neat-csv": "^6.0.0",
     "node-xlsx": "^0.15.0",
     "nodemon": "^2.0.6",
+    "uuid": "^8.3.2",
     "xls-to-json-lc": "^0.3.4",
     "xlsx": "^0.16.9",
     "xlsx-to-json": "^0.3.0",
